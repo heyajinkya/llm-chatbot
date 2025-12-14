@@ -2,11 +2,28 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader2, Database, School, MessageSquare, Sparkles, TrendingUp } from 'lucide-react';
 
+type FAQ = {
+  category: string;
+  question: string;
+  answer: string;
+};
+
+
+type ChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: FAQ[] | null;
+  responseTime?: string;
+};
+
+
+
 const UniqueSchoolsFAQBot = () => {
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [faqs, setFaqs] = useState([]);
+  const [faqs, setFaqs] = useState<FAQ[]>([]);
+
   const [stats, setStats] = useState({ totalQueries: 0, avgResponseTime: 0, satisfaction: 98 });
   const messagesEndRef = useRef(null);
 
