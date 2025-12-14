@@ -6,7 +6,9 @@ type FAQ = {
   category: string;
   question: string;
   answer: string;
+  score?: number; 
 };
+
 
 
 type ChatMessage = {
@@ -25,10 +27,11 @@ const UniqueSchoolsFAQBot = () => {
   const [faqs, setFaqs] = useState<FAQ[]>([]);
 
   const [stats, setStats] = useState({ totalQueries: 0, avgResponseTime: 0, satisfaction: 98 });
-  const messagesEndRef = useRef(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
 
   // Comprehensive Unique Schools FAQ Database
-  const uniqueSchoolsFAQs = [
+  const uniqueSchoolsFAQs:FAQ[] = [
     // Company Information
     {
       category: "Company Overview",
@@ -215,7 +218,12 @@ const UniqueSchoolsFAQBot = () => {
   }, []);
 
   // Advanced similarity with keyword boosting
-  const calculateSimilarity = (query, text, category) => {
+  const calculateSimilarity = (
+  query: string,
+  text: string,
+  category: string
+): number => {
+
     const q = query.toLowerCase();
     const t = text.toLowerCase();
     
@@ -255,7 +263,11 @@ const UniqueSchoolsFAQBot = () => {
     return (baseSimilarity * boost) + categoryBonus;
   };
 
-  const findRelevantFAQs = (query, topK = 4) => {
+  const findRelevantFAQs = (
+  query: string,
+  topK: number = 4
+): FAQ[] => {
+
     const scored = faqs.map(faq => ({
       ...faq,
       score: calculateSimilarity(
@@ -383,7 +395,7 @@ Remember: You're representing a growing Irish EdTech company that genuinely care
     }
   };
 
-  const handleKeyPress = (e) => {
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -401,7 +413,7 @@ Remember: You're representing a growing Irish EdTech company that genuinely care
     "Do you integrate with existing systems?"
   ];
 
-  const handleQuickQuestion = (question) => {
+  const handleQuickQuestion = (question: string) => {
     setInput(question);
   };
 
