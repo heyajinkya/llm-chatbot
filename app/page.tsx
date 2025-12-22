@@ -11,10 +11,17 @@ type FAQ = {
 
 
 
+type DocSource = {
+  fileName: string;
+  snippet: string;
+  score?: number;
+};
+
 type ChatMessage = {
   role: 'user' | 'assistant';
   content: string;
-  sources?: FAQ[] | null;
+  faqSources?: FAQ[] | null;
+  docSources?: DocSource[] | null;
   responseTime?: string;
 };
 
@@ -24,6 +31,10 @@ const UniqueSchoolsFAQBot = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [ragMode, setRagMode] = useState<'faq' | 'docs' | 'both'>('both');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [faqs, setFaqs] = useState<FAQ[]>([]);
 
   const [stats, setStats] = useState({ totalQueries: 0, avgResponseTime: 0, satisfaction: 98 });
@@ -299,13 +310,49 @@ const UniqueSchoolsFAQBot = () => {
 
 
     try {
-      const relevantFAQs = findRelevantFAQs(userMessage, 4);
+      const relevantFAQs = ragMode === 'docs' ? [] : findRelevantFAQs(userMessage, 4);
       
-      const context = relevantFAQs.length > 0
-        ? relevantFAQs.map((faq, idx) => 
-            `[FAQ ${idx + 1}] Category: ${faq.category}\nQ: ${faq.question}\nA: ${faq.answer}\n(Relevance: ${(faq.score * 100).toFixed(1)}%)`
-          ).join('\n\n---\n\n')
-        : 'No directly matching FAQs found in knowledge base.';
+      const context = ragMode === 'docs'
+        ? ''
+        : (relevantFAQs.length > 0
+          ? relevantFAQs.map((faq, idx) => 
+              `[FAQ ${idx + 1}] Category: ${faq.category}\nQ: ${faq.question}\nA: ${faq.answer}\n(Relevance: ${(faq.score * 100).toFixed(1)}%)`
+            ).join('\n\n---\n\n')
+          : 'No directly matching FAQs found in knowledge base.');
+
+      // Optionally retrieve document chunks if mode includes docs
+      let docContext = "";
+      let docSources: DocSource[] | null = null;
+      if (ragMode === 'docs' || ragMode === 'both') {
+        try {
+          const searchRes = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: userMessage, topK: 6 }),
+          });
+          if (searchRes.ok) {
+            const { chunks } = await searchRes.json();
+            if (chunks && chunks.length > 0) {
+              docContext = chunks.map((c: any, idx: number) => `[#${idx + 1}] File: ${c.fileName}\n${c.text}`).join('\n\n---\n\n');
+              docSources = chunks.slice(0, 3).map((c: any) => ({ fileName: c.fileName, snippet: c.text.slice(0, 160) + (c.text.length > 160 ? '…' : ''), score: c.score }));
+            }
+          }
+        } catch (e) {
+          console.error('Doc search failed', e);
+        }
+      }
+
+      if (ragMode === 'docs' && !docContext) {
+        const responseTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'The uploaded documents do not contain this information.',
+          docSources: null,
+          responseTime,
+        }]);
+        setLoading(false);
+        return;
+      }
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -336,17 +383,21 @@ PRODUCTS:
 
 RESPONSE GUIDELINES:
 ✓ Be professional yet friendly and conversational
-✓ Use the FAQ context to provide accurate, detailed answers
 ✓ Include specific features, benefits, and technical details when relevant
-✓ If answer isn't in FAQs, acknowledge this and offer to connect them with our team
-✓ Highlight integration capabilities and Irish school focus
-✓ Emphasize ROI, time savings, and customer satisfaction
 ✓ For pricing questions, mention custom quotes and offer demo/trial
 ✓ Always maintain enthusiasm about helping Irish schools digitize
-✓ Use bullet points sparingly - only for complex lists
 ✓ Keep responses comprehensive but scannable
 
-FAQ KNOWLEDGE BASE:
+RAG CONTEXT POLICY:
+- Mode: ${ragMode.toUpperCase()}
+- If Mode is DOCS: Only answer using the provided DOCUMENT CONTEXT. If information is not present, reply exactly with: "The uploaded documents do not contain this information."
+- If Mode is FAQ: Use the FAQ knowledge base only.
+- If Mode is BOTH: Prefer DOCUMENT CONTEXT; use FAQ context to supplement if needed.
+
+DOCUMENT CONTEXT (top matches):
+${docContext || 'No uploaded document context available.'}
+
+FAQ KNOWLEDGE BASE (top matches):
 ${context}
 
 Remember: You're representing a growing Irish EdTech company that genuinely cares about making schools better through technology.`
@@ -374,7 +425,8 @@ Remember: You're representing a growing Irish EdTech company that genuinely care
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: botResponse,
-        sources: relevantFAQs.length > 0 ? relevantFAQs : null,
+        faqSources: (ragMode === 'faq' || ragMode === 'both') && relevantFAQs.length > 0 ? relevantFAQs : null,
+        docSources: docSources,
         responseTime
       }]);
 
@@ -513,14 +565,14 @@ Remember: You're representing a growing Irish EdTech company that genuinely care
                 }`}>
                   <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                   
-                  {msg.sources && msg.sources.length > 0 && (
+                  {msg.faqSources && msg.faqSources.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-gray-200">
                       <div className="flex items-center gap-2 text-xs text-gray-600 mb-3 font-semibold">
                         <Database size={14} />
-                        <span>Knowledge Sources ({msg.sources.length}):</span>
+                        <span>FAQ Sources ({msg.faqSources.length}):</span>
                       </div>
                       <div className="space-y-2">
-                        {msg.sources.map((src, i) => (
+                        {msg.faqSources.map((src, i) => (
                           <div key={i} className="bg-gradient-to-r from-indigo-50 to-blue-50 px-3 py-2.5 rounded-lg border border-indigo-100">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1">
@@ -537,7 +589,33 @@ Remember: You're representing a growing Irish EdTech company that genuinely care
                     </div>
                   )}
                   
-                  {msg.responseTime && (
+                  {msg.docSources && msg.docSources.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <div className="flex items-center gap-2 text-xs text-gray-600 mb-3 font-semibold">
+                          <Database size={14} />
+                          <span>Document Sources ({msg.docSources.length}):</span>
+                        </div>
+                        <div className="space-y-2">
+                          {msg.docSources.map((src, i) => (
+                            <div key={i} className="bg-gradient-to-r from-emerald-50 to-green-50 px-3 py-2.5 rounded-lg border border-emerald-100">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1">
+                                  <span className="text-xs font-bold text-emerald-800">[{src.fileName}]</span>
+                                  <p className="text-xs text-gray-700 mt-1">{src.snippet}</p>
+                                </div>
+                                {typeof src.score === 'number' && (
+                                  <span className="text-xs bg-emerald-600 text-white px-2 py-1 rounded-full font-medium">
+                                    {(src.score * 100).toFixed(0)}%
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {msg.responseTime && (
                     <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
                       <TrendingUp size={12} />
                       <span>Responded in {msg.responseTime}s</span>
@@ -573,6 +651,70 @@ Remember: You're representing a growing Irish EdTech company that genuinely care
       {/* Enhanced Input Area */}
       <div className="bg-white border-t shadow-2xl">
         <div className="max-w-6xl mx-auto p-4">
+          {/* Upload & Mode Controls */}
+          <div className="mb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                accept=".pdf,.docx,.txt,.csv"
+                multiple
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  const MAX_MB = 15;
+                  const allowed = files.filter(f => f.size <= MAX_MB * 1024 * 1024);
+                  const rejected = files.filter(f => f.size > MAX_MB * 1024 * 1024);
+                  if (rejected.length) {
+                    alert(`Some files were too large (> ${MAX_MB}MB):\n` + rejected.map(f => `- ${f.name}`).join('\n'));
+                  }
+                  setSelectedFiles(allowed);
+                }}
+                className="hidden"
+                id="file-input"
+              />
+              <label htmlFor="file-input" className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium">
+                Select Files
+              </label>
+              <button
+                onClick={async () => {
+                  if (!selectedFiles.length) return;
+                  setUploading(true);
+                  try {
+                    const form = new FormData();
+                    selectedFiles.forEach(f => form.append('files', f));
+                    const res = await fetch('/api/upload', { method: 'POST', body: form });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Upload failed');
+                    setUploadedFiles(prev => Array.from(new Set([...prev, ...data.results.map((r: any) => r.fileName)])));
+                    setSelectedFiles([]);
+                  } catch (e: any) {
+                    alert('Upload error: ' + (e.message || 'Unknown error'));
+                  } finally {
+                    setUploading(false);
+                  }
+                }}
+                disabled={uploading || selectedFiles.length === 0}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50"
+              >
+                {uploading ? 'Uploading…' : 'Upload'}
+              </button>
+              <div className="text-xs text-gray-600">
+                {uploadedFiles.length > 0 ? `Uploaded: ${uploadedFiles.join(', ')}` : 'No files uploaded yet.'}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium">RAG Mode:</label>
+              <select
+                value={ragMode}
+                onChange={(e) => setRagMode(e.target.value as any)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="faq">Use Company FAQ</option>
+                <option value="docs">Use Uploaded Documents</option>
+                <option value="both">Use Both</option>
+              </select>
+            </div>
+          </div>
+
           <div className="flex gap-3">
             <input
               type="text"

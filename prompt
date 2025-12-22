@@ -1,0 +1,164 @@
+I already have a Next.js client-side chatbot called UniqueSchoolsFAQBot.
+
+Current features:
+
+Uses Groq LLaMA 3.3 via OpenAI-compatible API
+
+Uses RAG with an in-memory FAQ knowledge base
+
+Calculates semantic similarity manually
+
+Sends matched context into the system prompt
+
+UI is already complete and production-ready
+
+🎯 OBJECTIVE
+
+Extend the existing chatbot so that:
+
+✅ Users can upload multiple files at once
+✅ Supported formats:
+
+PDF
+
+DOCX
+
+TXT
+
+CSV (optional bonus)
+
+✅ The AI:
+
+Extracts all text from uploaded files
+
+Chunks the text
+
+Generates embeddings
+
+Stores embeddings in memory (MVP)
+
+Retrieves relevant chunks at query time
+
+Answers questions only using uploaded documents
+
+🧩 TECH REQUIREMENTS
+
+Frontend
+
+Add multi-file upload UI
+
+Show uploaded file names
+
+Allow asking questions after upload
+
+Backend (Next.js App Router)
+
+Create API route:
+
+/app/api/upload/route.ts
+
+
+Handle multipart/form-data
+
+Extract text from:
+
+PDFs (pdf-parse)
+
+DOCX (mammoth)
+
+TXT (native)
+
+Support multiple files in one request
+
+RAG Pipeline
+
+Extract text
+
+Chunk text (500 tokens, 100 overlap)
+
+Generate embeddings using:
+
+https://api.groq.com/openai/v1/embeddings
+model: text-embedding-3-large
+
+
+Store vectors in memory
+
+On user query:
+
+Embed query
+
+Perform cosine similarity
+
+Retrieve top-K chunks
+
+Inject retrieved chunks into the system prompt
+
+📜 SYSTEM PROMPT BEHAVIOR
+
+When documents are uploaded:
+
+The AI must only answer from uploaded documents
+
+If the answer is not found, respond with:
+
+“The uploaded documents do not contain this information.”
+
+Include document citations in the response:
+
+Source 1: Uploaded File
+Source 2: Uploaded File
+
+🧪 EXPECTED OUTPUT
+
+You must generate:
+
+✅ Frontend code changes (file input + handler)
+
+✅ Backend API route code
+
+✅ Text extraction logic
+
+✅ Chunking utility
+
+✅ Embedding + vector store logic
+
+✅ Cosine similarity search
+
+✅ Updated Groq chat completion call
+
+✅ Clean, well-commented TypeScript code
+
+✅ No pseudo-code — only runnable code
+
+⚠️ IMPORTANT CONSTRAINTS
+
+Do NOT rewrite existing UI unless necessary
+
+Do NOT remove existing FAQ-based RAG
+
+Add file-based RAG alongside FAQ RAG
+
+Prefer clarity over abstraction
+
+Follow Next.js App Router conventions
+
+Use TypeScript everywhere
+
+🧠 BONUS (Optional but Preferred)
+
+Add a toggle:
+
+“Use Company FAQ”
+
+“Use Uploaded Documents”
+
+“Use Both”
+
+Add loading states for file processing
+
+Add basic file size validation
+
+🏁 FINAL GOAL
+
+Produce production-ready code that transforms my chatbot into an enterprise-grade document-aware AI assistant similar to ChatGPT’s file upload feature.
